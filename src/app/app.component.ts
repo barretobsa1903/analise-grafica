@@ -9,9 +9,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatOptionModule } from '@angular/material/core';
 import { CommonModule } from '@angular/common';
-import { InsideBarSetup, Setup123Compra } from './Setups/setups'; // Caminho relativo para o arquivo
+import { BarraVermelhaIgnoradaSetup, InsideBarSetup, Setup123Compra } from './Setups/setups'; // Caminho relativo para o arquivo
 import { Setup } from '../Interface/setup'; // Caminho relativo para o arquivo
-import { SetupDTO } from './objetos/setupsDTO';
+import { IndicesForMovingAveragesDTO, SetupDTO } from './objetos/setupsDTO';
 import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { SetupType } from './types/type';
 
@@ -40,7 +40,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private chart!: IChartApi;
   searchControl = new FormControl('');
-  options: SetupDTO[] = [{ nome: 'insideBar', descricao: 'Insidebar' }, { nome: 'setup123compra', descricao: '123 de compra' }];
+  options: SetupDTO[] = [
+    { nome: 'Insidebar', descricao: 'insideBar' },
+    { nome: 'Barra Vermelha Ignorada', descricao: 'barravermelhaignorada' },  
+    { nome: '123 de compra', descricao: 'setup123compra' }];
+  
   filteredOptions: SetupDTO[] = [];
   candlestickSeries: any; // Declara como atributo da classe
   dataBinance: any;
@@ -101,7 +105,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   // Função para buscar dados da Binance (exemplo: BTC/USDT em velas de 1 dia)
   private async fetchBinanceData(symbol: string, interval: string): Promise<CandlestickData[]> {
-    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=500`;
+    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=400  `;
     const response = await fetch(url);
     const data = await response.json();
 
@@ -137,7 +141,7 @@ export class AppComponent implements OnInit, OnDestroy {
         result.push({
           time: data[i].time, // Usa o mesmo `time` do candle atual
           value: sum / period, // Média do período
-          period : period
+          period: period
         });
       }
     }
@@ -148,22 +152,46 @@ export class AppComponent implements OnInit, OnDestroy {
   onOptionSelected(event: MatAutocompleteSelectedEvent): void {
     const selectedOption = event.option.value;
     console.log('Opção selecionada:', selectedOption);
-    //const ma8 = this.calculateMovingAverage(this.dataBinance, 14);
-    const ma80 = this.calculateMovingAverage(this.dataBinance, 5);
-    // Adicionar médias móveis ao gráfico
-    //this.chart.addLineSeries({ color: '#ffff' }).setData(ma8);
+
+    
+    const ma8 = this.calculateMovingAverage(this.dataBinance, 8);
+    const ma80 = this.calculateMovingAverage(this.dataBinance, 80);
+
+    const periods = [8, 80];
+
+    const indices = this.findIndicesForMovingAverages([ma8, ma80], periods);
+
+    console.log(indices);
+
+    this.chart.addLineSeries({ color: '#ffff' }).setData(ma8);
     this.chart.addLineSeries({ color: 'blue' }).setData(ma80);
-    // Verificar e marcar o setup 123 de compra
-    this.identifyAndMarkSetup(this.dataBinance, [ma80], this.candlestickSeries, selectedOption);
+
+    this.identifyAndMarkSetup(this.dataBinance, [ma8, ma80], this.candlestickSeries, selectedOption, indices);
+  }
+
+  findIndicesForMovingAverages(
+    movingAverages: LineData[][],
+    periods: number[]
+  ): IndicesForMovingAveragesDTO[] {
+    // Calcular o maior deslocamento necessário
+    const startPoint = Math.max(...periods.map((period) => period - 1));
+
+    // Encontrar os índices para cada média móvel no ponto inicial
+    const indices = movingAverages.map((ma, i) => ({
+      period: periods[i], // Período da média
+      index: ma.length > startPoint ? startPoint - (periods[i] - 1) : -1, // Verifica se há dados suficientes
+    }));
+
+    return indices;
   }
 
   private identifyAndMarkSetup(
     data: CandlestickData[],
     movingAverages: LineData[][], // Lista de médias móveis
     candlestickSeries: any,
-    selectedSetup: SetupType // Receber o tipo de setup escolhido pelo cliente
+    selectedSetup: SetupType, // Receber o tipo de setup escolhido pelo cliente
+    indices: IndicesForMovingAveragesDTO[]
   ): void {
-    const offset = 5 - 1; // Define o deslocamento com base no período
 
     const updatedData = [...data];
     // Fazer uma cópia dos dados originais para modificar
@@ -171,7 +199,8 @@ export class AppComponent implements OnInit, OnDestroy {
     // Definir a fábrica de setups
     const setupFactory = {
       insideBar: InsideBarSetup,
-      setup123compra: Setup123Compra
+      setup123compra: Setup123Compra,
+      barravermelhaignorada: BarraVermelhaIgnoradaSetup
     };
 
     // Verificar o setup escolhido
@@ -185,17 +214,18 @@ export class AppComponent implements OnInit, OnDestroy {
     const setupToApply = new SetupClass();
 
     // Iterar sobre os dados de candlestick para identificar o setup
-    let countMovingAverages = 0;
-
-    for (let i = offset+1; i < data.length - 1; i++) {      
-      if (setupToApply.check(data, i, movingAverages, countMovingAverages))
+    for (let i = 79; i < data.length - 1; i++) {
+      if (setupToApply.check(data, i, movingAverages, indices))
         setupToApply.applyChanges(updatedData, i);
-      countMovingAverages++;
+      // Incrementa o valor de `index` em 1 para cada objeto em `indices`
+      indices.forEach((obj) => {
+        obj.index += 1;
+      });
     }
-
     // Atualizar os dados da série com o setup aplicado
     candlestickSeries.setData(updatedData);
   }
+
 
   ngOnDestroy(): void {
     // Limpar o gráfico ao destruir o componente

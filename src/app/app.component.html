@@ -13,8 +13,8 @@
         placeholder="Digite para buscar"
       />
       <mat-autocomplete #auto="matAutocomplete" (optionSelected)="onOptionSelected($event)" >
-        <mat-option *ngFor="let option of filteredOptions" [value]="option.nome">
-          {{ option.descricao }}
+        <mat-option *ngFor="let option of filteredOptions" [value]="option.descricao">
+          {{ option.nome }}
         </mat-option>
       </mat-autocomplete>
     </mat-form-field>
