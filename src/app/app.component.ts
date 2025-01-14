@@ -30,8 +30,11 @@ export class AppComponent implements OnInit, OnDestroy {
   selectedType!: string | undefined; // Tipo selecionado
 
   types: string[] = ['MA', 'MME']; // Opções de tipo
-  items: { period: number; type: string }[] = []; // Lista de itens adicionados
+  listMedia: { period: number; type: string }[] = []; // Lista de itens adicionados
   showMenu = true;  // Controla a exibição do menu lateral
+  selectedOption: SetupType = undefined;
+
+  operationType: 'long' | 'short' | null = null;
 
 
   constructor(private elRef: ElementRef) { }
@@ -87,14 +90,14 @@ export class AppComponent implements OnInit, OnDestroy {
 
   addItem() {
     if (this.period && this.selectedType) {
-      this.items.push({ period: this.period, type: this.selectedType });
+      this.listMedia.push({ period: this.period, type: this.selectedType });
       this.period = undefined;
       this.selectedType = undefined;
     }
   }
   // Remove um item da lista
   removeItem(index: number) {
-    this.items.splice(index, 1);
+    this.listMedia.splice(index, 1);
   }
 
   private filterOptions(value: string): SetupDTO[] {
@@ -161,7 +164,7 @@ export class AppComponent implements OnInit, OnDestroy {
     });
   }
 
-  private calculateExponentialMovingAverage(data: CandlestickData[], period: number): LineData[] {
+  private calculateExponentialMovingAverage(data: CandlestickData[], period: number, typeMedia:string): LineData[] {
     const result: LineData[] = [];
 
     if (data.length < period) {
@@ -185,7 +188,8 @@ export class AppComponent implements OnInit, OnDestroy {
       result.push({
         time: data[i].time,
         value: previousEma,
-        period: period
+        period: period,
+        typeMedia:typeMedia
       });
     }
 
@@ -193,7 +197,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   // Função para calcular a média móvel similar ao TradingView
-  private calculateMovingAverage(data: CandlestickData[], period: number): LineData[] {
+  private calculateMovingAverage(data: CandlestickData[], period: number, typeMedia:string): LineData[] {
     const result: LineData[] = [];
 
     if (data.length < period) {
@@ -214,7 +218,8 @@ export class AppComponent implements OnInit, OnDestroy {
         result.push({
           time: data[i].time, // Usa o mesmo `time` do candle atual
           value: sum / period, // Média do período
-          period: period
+          period: period,
+          typeMedia:typeMedia
         });
       }
     }
@@ -223,26 +228,8 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   onOptionSelected(event: MatAutocompleteSelectedEvent): void {
-
     const result = this.options.find((option) => option.nome === event.option.value);
-
-    const selectedOption = result?.descricao as SetupType
-
-    console.log('Opção selecionada:', selectedOption);
-
-    const ma8 = this.calculateMovingAverage(this.dataBinance, 8);
-    const ma80 = this.calculateMovingAverage(this.dataBinance, 80);
-
-    const periods = [8, 80];
-
-    const indices = this.findIndicesForMovingAverages([ma8, ma80], periods);
-
-    console.log(indices);
-
-    this.chart.addLineSeries({ color: '#ffff' }).setData(ma8);
-    this.chart.addLineSeries({ color: 'blue' }).setData(ma80);
-
-    this.identifyAndMarkSetup(this.dataBinance, [ma8, ma80], this.candlestickSeries, selectedOption, indices);
+    this.selectedOption = result?.descricao as SetupType
   }
 
   findIndicesForMovingAverages(
@@ -280,34 +267,94 @@ export class AppComponent implements OnInit, OnDestroy {
     };
 
     // Verificar o setup escolhido
-    const SetupClass = setupFactory[selectedSetup]; // Seleção do setup pelo cliente
-    if (!SetupClass) {
-      console.error('Setup inválido!');
-      return; // Se não houver setup selecionado, não faz nada
+    if (selectedSetup) {
+      const SetupClass = setupFactory[selectedSetup]; // Seleção do setup pelo cliente
+      const setupToApply = new SetupClass();
+      // Instanciando o setup escolhido
+
+      if(movingAverages.length > 0 && indices.length > 0){
+        const maxPeriod = indices.reduce((max, item) => (item.period > max ? item.period : max), -Infinity);
+
+        // Iterar sobre os dados de candlestick para identificar o setup
+        for (let i = maxPeriod - 1; i < data.length - 1; i++) {
+          if (setupToApply.check(data, i, movingAverages, indices))
+            setupToApply.applyChanges(updatedData, i);
+          // Incrementa o valor de `index` em 1 para cada objeto em `indices`
+          indices.forEach((obj) => {
+            obj.index += 1;
+          });
+        }
+        // Atualizar os dados da série com o setup aplicado
+        if (!SetupClass) {
+          console.error('Setup inválido!');
+          return; // Se não houver setup selecionado, não faz nada
+        }
+      }else{
+        for (let i = 1; i < data.length - 1; i++) {
+          if (setupToApply.check(data, i, [], []))
+            setupToApply.applyChanges(updatedData, i);
+          // Incrementa o valor de `index` em 1 para cada objeto em `indices`
+          indices.forEach((obj) => {
+            obj.index += 1;
+          });
+        }
+        // Atualizar os dados da série com o setup aplicado
+        if (!SetupClass) {
+          console.error('Setup inválido!');
+          return; // Se não houver setup selecionado, não faz nada
+        }
+      }
+
+
     }
 
-    // Instanciando o setup escolhido
-    const setupToApply = new SetupClass();
-
-    const maxPeriod = indices.reduce((max, item) => (item.period > max ? item.period : max), -Infinity);
-
-
-    // Iterar sobre os dados de candlestick para identificar o setup
-    for (let i = maxPeriod - 1; i < data.length - 1; i++) {
-      if (setupToApply.check(data, i, movingAverages, indices))
-        setupToApply.applyChanges(updatedData, i);
-      // Incrementa o valor de `index` em 1 para cada objeto em `indices`
-      indices.forEach((obj) => {
-        obj.index += 1;
-      });
-    }
-    // Atualizar os dados da série com o setup aplicado
     candlestickSeries.setData(updatedData);
   }
 
-  applyRules():void{
+  calculateAllMovingAverage():LineData[][]{
+
+    let resultAllMedia:LineData[][] = [];
+    
+     this.listMedia.map((item) => {
+      let result: LineData[] = [];
+
+
+      if (item.type === 'MA') {
+        result = this.calculateMovingAverage(this.dataBinance, item.period, 'MA');
+        resultAllMedia.push(result);
+      } else if (item.type === 'MME') {
+        result = this.calculateExponentialMovingAverage(this.dataBinance, item.period, 'MME');
+        resultAllMedia.push(result);
+      } else {
+        throw new Error(`Tipo de média desconhecido: ${item.type}`);
+      }
+    });
+
+    return resultAllMedia;
+  }
+  
+
+  applyRules(): void {
+
+    let resultAllMedia:LineData[][] = this.calculateAllMovingAverage();
+
+    if(resultAllMedia.length > 0){
+      const periods = this.listMedia.map((item) => item.period);
+
+      const indices = this.findIndicesForMovingAverages(resultAllMedia, periods);
+  
+      console.log(indices);
+  
+      resultAllMedia.forEach((item)=>{this.chart.addLineSeries({ color: '#ffff' }).setData(item)});
+  
+      this.identifyAndMarkSetup(this.dataBinance, resultAllMedia, this.candlestickSeries, this.selectedOption, indices);
+    }else{
+      this.identifyAndMarkSetup(this.dataBinance, [], this.candlestickSeries, this.selectedOption, []);
+
+    }
 
     
+
   }
 
 

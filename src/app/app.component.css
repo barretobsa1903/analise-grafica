@@ -125,3 +125,11 @@ button {
     width: 100%; /* A lista vai ocupar 100% da largura disponível */
   }
 }
+
+.radio-label {
+  font-size: 12px;
+  margin-bottom: 8px;
+  display: block;
+  width: 90%;
+  margin-left: 3%;
+}

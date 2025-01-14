@@ -1,3 +1,3 @@
 // src/app/types/setup.types.ts
 
-export type SetupType = 'insideBar' | 'setup123compra' | 'barravermelhaignorada';
+export type SetupType = 'insideBar' | 'setup123compra' | 'barravermelhaignorada' | undefined;

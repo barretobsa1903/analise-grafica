@@ -1,8 +1,5 @@
 import { Setup } from "src/Interface/setup";
-import { FunctionMA } from "../function/function";
 import { IndicesForMovingAveragesDTO } from "../objetos/setupsDTO";
-
-
 
 export class InsideBarSetup implements Setup {
     check(
@@ -14,7 +11,13 @@ export class InsideBarSetup implements Setup {
         const prevCandle = data[i - 1];
         const currentCandle = data[i];
 
-        let isAboveAllMAs = false;
+        let isAboveAllMAs = true;
+
+        if (movingAverages.length == 0 && indices.length == 0) {
+            return isAboveAllMAs &&
+                currentCandle.high < prevCandle.high &&
+                currentCandle.low > prevCandle.low;
+        }
 
         // Verificar se o candle está acima de todas as médias móveis
         isAboveAllMAs = movingAverages.every((ma, idx) => {
@@ -58,7 +61,13 @@ export class Setup123Compra implements Setup {
         const currentCandle = data[i];
         const nextCandle = data[i + 1];
 
-        let isAboveAllMAs = false;
+        let isAboveAllMAs = true;
+
+        if (movingAverages.length == 0 && indices.length == 0) {
+            return isAboveAllMAs &&
+                prevCandle.low > currentCandle.low && // A mínima do candle atual é menor que a mínima do anterior
+                nextCandle.low > currentCandle.low  // A mínima do próximo candle é maior ou igual à do atual
+        }
 
         // Verificar se o candle está acima de todas as médias móveis
         isAboveAllMAs = movingAverages.every((ma, idx) => {
@@ -73,13 +82,13 @@ export class Setup123Compra implements Setup {
                 prevCandle.close >= currentMA &&
                 currentCandle.close >= currentMA &&
                 nextCandle.close >= currentMA
-              );
+            );
         });
 
         // Identificar Inside Bars
         return isAboveAllMAs &&
-        prevCandle.low > currentCandle.low && // A mínima do candle atual é menor que a mínima do anterior
-        nextCandle.low > currentCandle.low  // A mínima do próximo candle é maior ou igual à do atual
+            prevCandle.low > currentCandle.low && // A mínima do candle atual é menor que a mínima do anterior
+            nextCandle.low > currentCandle.low  // A mínima do próximo candle é maior ou igual à do atual
     }
 
 
@@ -120,7 +129,15 @@ export class BarraVermelhaIgnoradaSetup implements Setup {
         const currentCandle = data[i];
         const nextCandle = data[i + 1];
 
-        let isAboveAllMAs = false;
+        let isAboveAllMAs = true;
+
+        if (movingAverages.length == 0 && indices.length == 0) {
+            // Identificar Inside Bars
+            return isAboveAllMAs &&
+                currentCandle.close < prevCandle.close &&
+                currentCandle.high < nextCandle.high
+        }
+
 
         // Verificar se o candle está acima de todas as médias móveis
         isAboveAllMAs = movingAverages.every((ma, idx) => {
@@ -131,7 +148,7 @@ export class BarraVermelhaIgnoradaSetup implements Setup {
             // Verifica se os valores existem e se o candle está acima da média móvel
             return (
                 currentMA !== undefined &&
-                prevCandle .close >= currentMA &&
+                prevCandle.close >= currentMA &&
                 currentCandle.close >= currentMA &&
                 nextCandle.close >= currentMA
             );

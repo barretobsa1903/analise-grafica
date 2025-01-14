@@ -3,7 +3,7 @@
   <div class="sidebar">
     <div class="form-container">
       <mat-form-field appearance="outline">
-        <mat-label>Escolha uma opção</mat-label>
+        <mat-label>Escolha uma setup</mat-label>
         <input type="text" matInput [formControl]="searchControl" [matAutocomplete]="auto"
           placeholder="Digite para buscar" />
         <mat-autocomplete #auto="matAutocomplete" (optionSelected)="onOptionSelected($event)">
@@ -17,14 +17,15 @@
     <div style="border: solid #9fb7c0;border-width: thin; border-radius: 10;margin-bottom: 5%;padding: 2%;">
     <!-- Formulário para configurar o período e tipo de média -->
     <div class="indicator-settings">
-      <mat-form-field appearance="fill">
-        <mat-label>Período</mat-label>
+      <mat-form-field appearance="fill" style="width: 90%;">
+        <mat-label>Período da média (8, 80...)</mat-label>
         <input matInput type="number" [(ngModel)]="period" min="1" max="200" />
         <mat-error *ngIf="period !== undefined && (period < 1 || period > 200)">
           Digite um valor entre 1 e 200
         </mat-error>
       </mat-form-field>
 
+      <label class="radio-label">Escolha o tipo da média: Exponencial (MME) ou Simples (MA):</label>
       <mat-radio-group [(ngModel)]="selectedType" class="radio-group">
         <mat-radio-button *ngFor="let type of types" [value]="type">{{ type }}</mat-radio-button>
       </mat-radio-group>
@@ -38,7 +39,7 @@
     <!-- Lista de médias configuradas -->
     <div class="item-list">
       <mat-list>
-        <mat-list-item *ngFor="let item of items; let i = index">
+        <mat-list-item *ngFor="let item of listMedia; let i = index">
           <span>{{ item.period }} - {{ item.type }}</span>
           <button mat-icon-button color="warn" (click)="removeItem(i)">
             <mat-icon>delete</mat-icon>
@@ -49,7 +50,7 @@
     </div>
 
 
-    <button mat-raised-button color="primary">Aplicar</button>
+    <button mat-raised-button color="primary" (click)="applyRules()">Aplicar</button>
 
   </div>
 
