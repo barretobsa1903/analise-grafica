@@ -1,22 +1,62 @@
 <div class="container">
+  <!-- Menu lateral para seleção de indicadores e controle -->
+  <div class="sidebar">
+    <div class="form-container">
+      <mat-form-field appearance="outline">
+        <mat-label>Escolha uma opção</mat-label>
+        <input type="text" matInput [formControl]="searchControl" [matAutocomplete]="auto"
+          placeholder="Digite para buscar" />
+        <mat-autocomplete #auto="matAutocomplete" (optionSelected)="onOptionSelected($event)">
+          <mat-option *ngFor="let option of filteredOptions" [value]="option.nome">
+            {{ option.nome }}
+          </mat-option>
+        </mat-autocomplete>
+      </mat-form-field>
+    </div>
+
+    <div style="border: solid #9fb7c0;border-width: thin; border-radius: 10;margin-bottom: 5%;padding: 2%;">
+    <!-- Formulário para configurar o período e tipo de média -->
+    <div class="indicator-settings">
+      <mat-form-field appearance="fill">
+        <mat-label>Período</mat-label>
+        <input matInput type="number" [(ngModel)]="period" min="1" max="200" />
+        <mat-error *ngIf="period !== undefined && (period < 1 || period > 200)">
+          Digite um valor entre 1 e 200
+        </mat-error>
+      </mat-form-field>
+
+      <mat-radio-group [(ngModel)]="selectedType" class="radio-group">
+        <mat-radio-button *ngFor="let type of types" [value]="type">{{ type }}</mat-radio-button>
+      </mat-radio-group>
+
+      <button mat-raised-button color="primary" (click)="addItem()" style="display: flex;width: 80%; margin-top: 5%;"
+        [disabled]="period !== undefined && (!period || period < 1 || period > 200 || !selectedType)">
+        Adicionar
+      </button>
+    </div>
+
+    <!-- Lista de médias configuradas -->
+    <div class="item-list">
+      <mat-list>
+        <mat-list-item *ngFor="let item of items; let i = index">
+          <span>{{ item.period }} - {{ item.type }}</span>
+          <button mat-icon-button color="warn" (click)="removeItem(i)">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </mat-list-item>
+      </mat-list>
+    </div>
+    </div>
+
+
+    <button mat-raised-button color="primary">Aplicar</button>
+
+  </div>
+
+  <!-- Área do gráfico -->
   <div id="chart-container" class="chart-container">
-    <!-- Conteúdo do gráfico -->
+    <!-- Gráfico será renderizado aqui -->
   </div>
-  <div class="form-container">
-    <mat-form-field appearance="outline">
-      <mat-label>Escolha uma opção</mat-label>
-      <input
-        type="text"
-        matInput
-        [formControl]="searchControl"
-        [matAutocomplete]="auto"
-        placeholder="Digite para buscar"
-      />
-      <mat-autocomplete #auto="matAutocomplete" (optionSelected)="onOptionSelected($event)" >
-        <mat-option *ngFor="let option of filteredOptions" [value]="option.descricao">
-          {{ option.nome }}
-        </mat-option>
-      </mat-autocomplete>
-    </mat-form-field>
-  </div>
+
+
 </div>

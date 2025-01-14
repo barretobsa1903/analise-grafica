@@ -1,39 +1,16 @@
 import { Component, ElementRef, OnInit, OnDestroy } from '@angular/core';
 import { createChart, IChartApi, CandlestickData, LineData } from 'lightweight-charts';
 import { FormControl } from '@angular/forms';
-import { Observable } from 'rxjs';
 import { map, startWith } from 'rxjs/operators';
-import { ReactiveFormsModule } from '@angular/forms';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatAutocompleteModule } from '@angular/material/autocomplete';
-import { MatOptionModule } from '@angular/material/core';
-import { CommonModule } from '@angular/common';
 import { BarraVermelhaIgnoradaSetup, InsideBarSetup, Setup123Compra } from './Setups/setups'; // Caminho relativo para o arquivo
-import { Setup } from '../Interface/setup'; // Caminho relativo para o arquivo
 import { IndicesForMovingAveragesDTO, SetupDTO } from './objetos/setupsDTO';
 import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { SetupType } from './types/type';
 
-
-type MovingAverage = {
-  data: LineData[];
-  period: number;
-};
-
 @Component({
   selector: 'app-root',
-  standalone: true,
   templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css'],
-  imports: [
-    ReactiveFormsModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatAutocompleteModule,
-    MatOptionModule,
-    CommonModule,
-  ],
+  styleUrls: ['./app.component.css']
 })
 
 export class AppComponent implements OnInit, OnDestroy {
@@ -42,12 +19,20 @@ export class AppComponent implements OnInit, OnDestroy {
   searchControl = new FormControl('');
   options: SetupDTO[] = [
     { nome: 'Insidebar', descricao: 'insideBar' },
-    { nome: 'Barra Vermelha Ignorada', descricao: 'barravermelhaignorada' },  
+    { nome: 'Barra Vermelha Ignorada', descricao: 'barravermelhaignorada' },
     { nome: '123 de compra', descricao: 'setup123compra' }];
-  
+
   filteredOptions: SetupDTO[] = [];
   candlestickSeries: any; // Declara como atributo da classe
   dataBinance: any;
+
+  period!: number | undefined; // Valor do período
+  selectedType!: string | undefined; // Tipo selecionado
+
+  types: string[] = ['MA', 'MME']; // Opções de tipo
+  items: { period: number; type: string }[] = []; // Lista de itens adicionados
+  showMenu = true;  // Controla a exibição do menu lateral
+
 
   constructor(private elRef: ElementRef) { }
 
@@ -81,11 +66,15 @@ export class AppComponent implements OnInit, OnDestroy {
 
     // Obter dados da Binance e adicionar ao gráfico
     this.fetchBinanceData('BTCUSDT', '4h').then((data) => {
+      // Inicializa ou configura seu gráfico com os dados iniciais (se necessário)
       this.candlestickSeries.setData(data);
       this.dataBinance = [...data];
-      // Calcular as médias móveis e adicionar as linhas ao gráfico
 
+      // Agora, vamos configurar a atualização contínua
+      // A função fetchBinanceData continuará a emitir novos candles à medida que eles são recebidos via WebSocket
+      this.setupWebSocketForRealTimeData('BTCUSDT', '4h');
     });
+
 
     // Filtro reativo
     this.searchControl.valueChanges
@@ -96,11 +85,63 @@ export class AppComponent implements OnInit, OnDestroy {
       .subscribe(filtered => (this.filteredOptions = filtered));
   }
 
+  addItem() {
+    if (this.period && this.selectedType) {
+      this.items.push({ period: this.period, type: this.selectedType });
+      this.period = undefined;
+      this.selectedType = undefined;
+    }
+  }
+  // Remove um item da lista
+  removeItem(index: number) {
+    this.items.splice(index, 1);
+  }
+
   private filterOptions(value: string): SetupDTO[] {
     const filterValue = value.toLowerCase();
     return this.options.filter(option =>
       option.descricao.toLowerCase().includes(filterValue)
     );
+  }
+
+
+
+  // Função para configurar o WebSocket e atualizar os dados em tempo real
+  private setupWebSocketForRealTimeData(symbol: string, interval: string) {
+    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@kline_${interval}`);
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      const kline = data.k;
+
+      // Verifica se o candle foi fechado
+      if (kline.x) {
+        const newCandle: CandlestickData = {
+          time: kline.t,  // Timestamp do candle
+          open: parseFloat(kline.o), // Preço de abertura
+          high: parseFloat(kline.h), // Preço máximo
+          low: parseFloat(kline.l),  // Preço mínimo
+          close: parseFloat(kline.c), // Preço de fechamento
+        };
+
+        // Atualiza o gráfico com o novo candle
+        this.candlestickSeries.update(newCandle);  // Exemplo de como você pode atualizar seu gráfico
+
+        // Adiciona o novo candle à lista de dados
+        this.dataBinance.push(newCandle);
+
+        // Se necessário, calcule as médias móveis ou outras métricas com o novo candle
+        // this.calculateMovingAverages();
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('Erro no WebSocket:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('Conexão WebSocket fechada.');
+    };
   }
 
   // Função para buscar dados da Binance (exemplo: BTC/USDT em velas de 1 dia)
@@ -119,6 +160,38 @@ export class AppComponent implements OnInit, OnDestroy {
       };
     });
   }
+
+  private calculateExponentialMovingAverage(data: CandlestickData[], period: number): LineData[] {
+    const result: LineData[] = [];
+
+    if (data.length < period) {
+      return result; // Retorna vazio se não houver dados suficientes para calcular a média
+    }
+
+    let alpha = 2 / (period + 1);
+    let previousEma = data[0].close; // Inicializa a primeira média exponencial com o primeiro valor de fechamento
+
+    result.push({
+      time: data[0].time,
+      value: previousEma,
+      period: period
+    });
+
+    for (let i = 1; i < data.length; i++) {
+      // Calcula a média exponencial usando o valor de fechamento atual e a MME anterior
+      previousEma = (data[i].close * alpha) + (previousEma * (1 - alpha));
+
+      // Adiciona a MME calculada ao resultado
+      result.push({
+        time: data[i].time,
+        value: previousEma,
+        period: period
+      });
+    }
+
+    return result;
+  }
+
   // Função para calcular a média móvel similar ao TradingView
   private calculateMovingAverage(data: CandlestickData[], period: number): LineData[] {
     const result: LineData[] = [];
@@ -150,10 +223,13 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   onOptionSelected(event: MatAutocompleteSelectedEvent): void {
-    const selectedOption = event.option.value;
+
+    const result = this.options.find((option) => option.nome === event.option.value);
+
+    const selectedOption = result?.descricao as SetupType
+
     console.log('Opção selecionada:', selectedOption);
 
-    
     const ma8 = this.calculateMovingAverage(this.dataBinance, 8);
     const ma80 = this.calculateMovingAverage(this.dataBinance, 80);
 
@@ -213,8 +289,11 @@ export class AppComponent implements OnInit, OnDestroy {
     // Instanciando o setup escolhido
     const setupToApply = new SetupClass();
 
+    const maxPeriod = indices.reduce((max, item) => (item.period > max ? item.period : max), -Infinity);
+
+
     // Iterar sobre os dados de candlestick para identificar o setup
-    for (let i = 79; i < data.length - 1; i++) {
+    for (let i = maxPeriod - 1; i < data.length - 1; i++) {
       if (setupToApply.check(data, i, movingAverages, indices))
         setupToApply.applyChanges(updatedData, i);
       // Incrementa o valor de `index` em 1 para cada objeto em `indices`
@@ -224,6 +303,11 @@ export class AppComponent implements OnInit, OnDestroy {
     }
     // Atualizar os dados da série com o setup aplicado
     candlestickSeries.setData(updatedData);
+  }
+
+  applyRules():void{
+
+    
   }
 
 
